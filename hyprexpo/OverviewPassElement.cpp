@@ -23,16 +23,24 @@ bool COverviewPassElement::needsPrecomputeBlur() {
 }
 
 std::optional<CBox> COverviewPassElement::boundingBox() {
-    if (!g_pOverview->pMonitor)
+    if (!g_pOverview)
         return std::nullopt;
 
-    return CBox{{}, g_pOverview->pMonitor->m_size};
+    auto monitor = g_pOverview->pMonitor.lock();
+    if (!monitor)
+        return std::nullopt;
+
+    return CBox{{}, monitor->m_size};
 }
 
 CRegion COverviewPassElement::opaqueRegion() {
-    if (!g_pOverview->pMonitor)
+    if (!g_pOverview)
         return CRegion{};
 
-    return CBox{{}, g_pOverview->pMonitor->m_size};
+    auto monitor = g_pOverview->pMonitor.lock();
+    if (!monitor)
+        return CRegion{};
+
+    return CBox{{}, monitor->m_size};
 }
 

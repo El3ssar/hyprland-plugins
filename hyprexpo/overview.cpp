@@ -249,7 +249,12 @@ void COverview::selectHoveredWorkspace() {
 }
 
 void COverview::redrawID(int id, bool forcelowres) {
-    if (pMonitor->m_activeWorkspace != startedOn && !closing) {
+    // pMonitor is a weak pointer; it may have been invalidated during gesture/animation
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
+    if (monitor->m_activeWorkspace != startedOn && !closing) {
         // likely user changed.
         onWorkspaceChange();
     }
@@ -260,59 +265,59 @@ void COverview::redrawID(int id, bool forcelowres) {
 
     id = std::clamp(id, 0, SIDE_LENGTH * SIDE_LENGTH);
 
-    Vector2D tileSize       = pMonitor->m_size / SIDE_LENGTH;
-    Vector2D tileRenderSize = (pMonitor->m_size - Vector2D{GAP_WIDTH, GAP_WIDTH} * (SIDE_LENGTH - 1)) / SIDE_LENGTH;
+    Vector2D tileSize       = monitor->m_size / SIDE_LENGTH;
+    Vector2D tileRenderSize = (monitor->m_size - Vector2D{GAP_WIDTH, GAP_WIDTH} * (SIDE_LENGTH - 1)) / SIDE_LENGTH;
     CBox     monbox{0, 0, tileSize.x * 2, tileSize.y * 2};
 
-    if (!forcelowres && (size->value() != pMonitor->m_size || closing))
-        monbox = {{0, 0}, pMonitor->m_pixelSize};
+    if (!forcelowres && (size->value() != monitor->m_size || closing))
+        monbox = {{0, 0}, monitor->m_pixelSize};
 
     if (!ENABLE_LOWRES)
-        monbox = {{0, 0}, pMonitor->m_pixelSize};
+        monbox = {{0, 0}, monitor->m_pixelSize};
 
     auto& image = images[id];
 
     if (image.fb.m_size != monbox.size()) {
         image.fb.release();
-        image.fb.alloc(monbox.w, monbox.h, pMonitor->m_output->state->state().drmFormat);
+        image.fb.alloc(monbox.w, monbox.h, monitor->m_output->state->state().drmFormat);
     }
 
     CRegion fakeDamage{0, 0, INT16_MAX, INT16_MAX};
-    g_pHyprRenderer->beginRender(pMonitor.lock(), fakeDamage, RENDER_MODE_FULL_FAKE, nullptr, &image.fb);
+    g_pHyprRenderer->beginRender(monitor, fakeDamage, RENDER_MODE_FULL_FAKE, nullptr, &image.fb);
 
     g_pHyprOpenGL->clear(CHyprColor{0, 0, 0, 1.0});
 
     const auto   PWORKSPACE = image.pWorkspace;
 
-    PHLWORKSPACE openSpecial = pMonitor->m_activeSpecialWorkspace;
+    PHLWORKSPACE openSpecial = monitor->m_activeSpecialWorkspace;
     if (openSpecial)
-        pMonitor->m_activeSpecialWorkspace.reset();
+        monitor->m_activeSpecialWorkspace.reset();
 
     startedOn->m_visible = false;
 
     if (PWORKSPACE) {
-        pMonitor->m_activeWorkspace = PWORKSPACE;
+        monitor->m_activeWorkspace = PWORKSPACE;
         g_pDesktopAnimationManager->startAnimation(PWORKSPACE, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
         PWORKSPACE->m_visible = true;
 
         if (PWORKSPACE == startedOn)
-            pMonitor->m_activeSpecialWorkspace = openSpecial;
+            monitor->m_activeSpecialWorkspace = openSpecial;
 
-        g_pHyprRenderer->renderWorkspace(pMonitor.lock(), PWORKSPACE, Time::steadyNow(), monbox);
+        g_pHyprRenderer->renderWorkspace(monitor, PWORKSPACE, Time::steadyNow(), monbox);
 
         PWORKSPACE->m_visible = false;
         g_pDesktopAnimationManager->startAnimation(PWORKSPACE, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false, true);
 
         if (PWORKSPACE == startedOn)
-            pMonitor->m_activeSpecialWorkspace.reset();
+            monitor->m_activeSpecialWorkspace.reset();
     } else
-        g_pHyprRenderer->renderWorkspace(pMonitor.lock(), PWORKSPACE, Time::steadyNow(), monbox);
+        g_pHyprRenderer->renderWorkspace(monitor, PWORKSPACE, Time::steadyNow(), monbox);
 
     g_pHyprOpenGL->m_renderData.blockScreenShader = true;
     g_pHyprRenderer->endRender();
 
-    pMonitor->m_activeSpecialWorkspace = openSpecial;
-    pMonitor->m_activeWorkspace        = startedOn;
+    monitor->m_activeSpecialWorkspace = openSpecial;
+    monitor->m_activeWorkspace        = startedOn;
     startedOn->m_visible               = true;
     g_pDesktopAnimationManager->startAnimation(startedOn, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
 
