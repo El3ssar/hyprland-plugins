@@ -13,7 +13,8 @@
 #include "OverviewPassElement.hpp"
 
 static void damageMonitor(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
-    g_pOverview->damage();
+    if (g_pOverview)
+        g_pOverview->damage();
 }
 
 static void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
@@ -504,3 +505,4 @@ void COverview::onSwipeEnd() {
     swipeWasCommenced = true;
     m_isSwiping       = false;
 }
+

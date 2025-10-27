@@ -7,6 +7,10 @@ COverviewPassElement::COverviewPassElement() {
 }
 
 void COverviewPassElement::draw(const CRegion& damage) {
+    // g_pOverview may be reset by animation callbacks; guard against null
+    if (!g_pOverview)
+        return;
+
     g_pOverview->fullRender();
 }
 
@@ -31,3 +35,4 @@ CRegion COverviewPassElement::opaqueRegion() {
 
     return CBox{{}, g_pOverview->pMonitor->m_size};
 }
+
