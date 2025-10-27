@@ -11,9 +11,20 @@ void CExpoGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
     m_lastDelta   = 0.F;
     m_firstUpdate = true;
 
-    if (!g_pOverview)
-        g_pOverview = std::make_unique<COverview>(g_pCompositor->m_lastMonitor->m_activeWorkspace);
-    else {
+    if (!g_pOverview) {
+        // Guard against invalid monitor during overview creation
+        auto monitor = g_pCompositor->m_lastMonitor.lock();
+        if (!monitor || !monitor->m_activeWorkspace)
+            return;
+        
+        g_pOverview = std::make_unique<COverview>(monitor->m_activeWorkspace);
+    } else if (!g_pOverview->m_isSwiping) {
+        // Only toggle if not currently swiping to avoid re-entrancy
+        // Guard against invalid monitor
+        auto monitor = g_pOverview->pMonitor.lock();
+        if (!monitor)
+            return;
+            
         g_pOverview->selectHoveredWorkspace();
         g_pOverview->setClosing(true);
     }
