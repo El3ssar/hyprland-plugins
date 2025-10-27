@@ -242,9 +242,14 @@ void COverview::selectHoveredWorkspace() {
     if (closing)
         return;
 
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     // get tile x,y
-    int x     = lastMousePosLocal.x / pMonitor->m_size.x * SIDE_LENGTH;
-    int y     = lastMousePosLocal.y / pMonitor->m_size.y * SIDE_LENGTH;
+    int x     = lastMousePosLocal.x / monitor->m_size.x * SIDE_LENGTH;
+    int y     = lastMousePosLocal.y / monitor->m_size.y * SIDE_LENGTH;
     closeOnID = x + y * SIDE_LENGTH;
 }
 
@@ -337,6 +342,11 @@ void COverview::damage() {
 }
 
 void COverview::onDamageReported() {
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     damageDirty = true;
 
     Vector2D SIZE = size->value();
@@ -346,28 +356,33 @@ void COverview::onDamageReported() {
     // const auto& TILE           = images[std::clamp(openedID, 0, SIDE_LENGTH * SIDE_LENGTH)];
     CBox texbox = CBox{(openedID % SIDE_LENGTH) * tileRenderSize.x + (openedID % SIDE_LENGTH) * GAP_WIDTH,
                        (openedID / SIDE_LENGTH) * tileRenderSize.y + (openedID / SIDE_LENGTH) * GAP_WIDTH, tileRenderSize.x, tileRenderSize.y}
-                      .translate(pMonitor->m_position);
+                      .translate(monitor->m_position);
 
     damage();
 
     blockDamageReporting = true;
     g_pHyprRenderer->damageBox(texbox);
     blockDamageReporting = false;
-    g_pCompositor->scheduleFrameForMonitor(pMonitor.lock());
+    g_pCompositor->scheduleFrameForMonitor(monitor);
 }
 
 void COverview::close() {
     if (closing)
         return;
 
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     const int   ID = closeOnID == -1 ? openedID : closeOnID;
 
     const auto& TILE = images[std::clamp(ID, 0, SIDE_LENGTH * SIDE_LENGTH)];
 
-    Vector2D    tileSize = (pMonitor->m_size / SIDE_LENGTH);
+    Vector2D    tileSize = (monitor->m_size / SIDE_LENGTH);
 
-    *size = pMonitor->m_size * pMonitor->m_size / tileSize;
-    *pos  = (-((pMonitor->m_size / (double)SIDE_LENGTH) * Vector2D{ID % SIDE_LENGTH, ID / SIDE_LENGTH}) * pMonitor->m_scale) * (pMonitor->m_size / tileSize);
+    *size = monitor->m_size * monitor->m_size / tileSize;
+    *pos  = (-((monitor->m_size / (double)SIDE_LENGTH) * Vector2D{ID % SIDE_LENGTH, ID / SIDE_LENGTH}) * monitor->m_scale) * (monitor->m_size / tileSize);
 
     size->setCallbackOnEnd(removeOverview);
 
@@ -375,8 +390,8 @@ void COverview::close() {
 
     redrawAll();
 
-    if (TILE.workspaceID != pMonitor->activeWorkspaceID()) {
-        pMonitor->setSpecialWorkspace(0);
+    if (TILE.workspaceID != monitor->activeWorkspaceID()) {
+        monitor->setSpecialWorkspace(0);
 
         // If this tile's workspace was WORKSPACE_INVALID, move to the next
         // empty workspace. This should only happen if skip_empty is on, in
@@ -385,17 +400,17 @@ void COverview::close() {
 
         const auto NEWIDWS = g_pCompositor->getWorkspaceByID(NEWID);
 
-        const auto OLDWS = pMonitor->m_activeWorkspace;
+        const auto OLDWS = monitor->m_activeWorkspace;
 
         if (!NEWIDWS)
             g_pKeybindManager->changeworkspace(std::to_string(NEWID));
         else
             g_pKeybindManager->changeworkspace(NEWIDWS->getConfigName());
 
-        g_pDesktopAnimationManager->startAnimation(pMonitor->m_activeWorkspace, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
+        g_pDesktopAnimationManager->startAnimation(monitor->m_activeWorkspace, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
         g_pDesktopAnimationManager->startAnimation(OLDWS, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false, true);
 
-        startedOn = pMonitor->m_activeWorkspace;
+        startedOn = monitor->m_activeWorkspace;
     }
 }
 
@@ -407,13 +422,18 @@ void COverview::onPreRender() {
 }
 
 void COverview::onWorkspaceChange() {
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     if (valid(startedOn))
         g_pDesktopAnimationManager->startAnimation(startedOn, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false, true);
     else
-        startedOn = pMonitor->m_activeWorkspace;
+        startedOn = monitor->m_activeWorkspace;
 
     for (size_t i = 0; i < (size_t)(SIDE_LENGTH * SIDE_LENGTH); ++i) {
-        if (images[i].workspaceID != pMonitor->activeWorkspaceID())
+        if (images[i].workspaceID != monitor->activeWorkspaceID())
             continue;
 
         openedID = i;
@@ -429,9 +449,14 @@ void COverview::render() {
 }
 
 void COverview::fullRender() {
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     const auto GAPSIZE = (closing ? (1.0 - size->getPercent()) : size->getPercent()) * GAP_WIDTH;
 
-    if (pMonitor->m_activeWorkspace != startedOn && !closing) {
+    if (monitor->m_activeWorkspace != startedOn && !closing) {
         // likely user changed.
         onWorkspaceChange();
     }
@@ -446,7 +471,7 @@ void COverview::fullRender() {
     for (size_t y = 0; y < (size_t)SIDE_LENGTH; ++y) {
         for (size_t x = 0; x < (size_t)SIDE_LENGTH; ++x) {
             CBox texbox = {x * tileRenderSize.x + x * GAPSIZE, y * tileRenderSize.y + y * GAPSIZE, tileRenderSize.x, tileRenderSize.y};
-            texbox.scale(pMonitor->m_scale).translate(pos->value());
+            texbox.scale(monitor->m_scale).translate(pos->value());
             texbox.round();
             CRegion damage{0, 0, INT16_MAX, INT16_MAX};
             g_pHyprOpenGL->renderTextureInternal(images[x + y * SIDE_LENGTH].fb.getTexture(), texbox, {.damage = &damage, .a = 1.0});
@@ -476,18 +501,23 @@ void COverview::onSwipeUpdate(double delta) {
     if (swipeWasCommenced)
         return;
 
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
     static auto* const* PDISTANCE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:gesture_distance")->getDataStaticPtr();
 
     const float         PERC               = closing ? std::clamp(delta / (double)**PDISTANCE, 0.0, 1.0) : 1.0 - std::clamp(delta / (double)**PDISTANCE, 0.0, 1.0);
     const auto          WORKSPACE_FOCUS_ID = closing && closeOnID != -1 ? closeOnID : openedID;
 
-    Vector2D            tileSize = (pMonitor->m_size / SIDE_LENGTH);
+    Vector2D            tileSize = (monitor->m_size / SIDE_LENGTH);
 
-    const auto          SIZEMAX = pMonitor->m_size * pMonitor->m_size / tileSize;
-    const auto          POSMAX  = (-((pMonitor->m_size / (double)SIDE_LENGTH) * Vector2D{WORKSPACE_FOCUS_ID % SIDE_LENGTH, WORKSPACE_FOCUS_ID / SIDE_LENGTH}) * pMonitor->m_scale) *
-        (pMonitor->m_size / tileSize);
+    const auto          SIZEMAX = monitor->m_size * monitor->m_size / tileSize;
+    const auto          POSMAX  = (-((monitor->m_size / (double)SIDE_LENGTH) * Vector2D{WORKSPACE_FOCUS_ID % SIDE_LENGTH, WORKSPACE_FOCUS_ID / SIDE_LENGTH}) * monitor->m_scale) *
+        (monitor->m_size / tileSize);
 
-    const auto SIZEMIN = pMonitor->m_size;
+    const auto SIZEMIN = monitor->m_size;
     const auto POSMIN  = Vector2D{0, 0};
 
     size->setValueAndWarp(lerp(SIZEMIN, SIZEMAX, PERC));
@@ -495,14 +525,19 @@ void COverview::onSwipeUpdate(double delta) {
 }
 
 void COverview::onSwipeEnd() {
-    const auto SIZEMIN = pMonitor->m_size;
-    const auto SIZEMAX = pMonitor->m_size * pMonitor->m_size / (pMonitor->m_size / SIDE_LENGTH);
+    // pMonitor is a weak pointer; lock it before use
+    auto monitor = pMonitor.lock();
+    if (!monitor)
+        return;
+
+    const auto SIZEMIN = monitor->m_size;
+    const auto SIZEMAX = monitor->m_size * monitor->m_size / (monitor->m_size / SIDE_LENGTH);
     const auto PERC    = (size->value() - SIZEMIN).x / (SIZEMAX - SIZEMIN).x;
     if (PERC > 0.5) {
         close();
         return;
     }
-    *size = pMonitor->m_size;
+    *size = monitor->m_size;
     *pos  = {0, 0};
 
     size->setCallbackOnEnd([this](WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) { redrawAll(true); });
